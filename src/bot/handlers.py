@@ -81,6 +81,26 @@ def _get_matching_available_items(
     ]
 
 
+def _get_primary_brand_tag(item: HomeBoxItem) -> str | None:
+    if not item.tags:
+        return None
+    for tag in item.tags:
+        t = (tag or "").strip()
+        if t:
+            return t
+    return None
+
+
+def _format_item_with_optional_brand(
+    item: HomeBoxItem, *, include_brand: bool
+) -> str:
+    if include_brand:
+        brand = _get_primary_brand_tag(item)
+        if brand:
+            return f"{item.name} (qty: {item.quantity}, brand: {brand})"
+    return f"{item.name} (qty: {item.quantity})"
+
+
 async def handle_location_items(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -120,11 +140,14 @@ async def handle_location_items(
         return
     items = [i for i in items if not i.archived and (i.quantity or 0) > 0]
     lines = [f"📦 {matched.name}"]
+    include_brand = matched.name.strip().lower() == "filament"
     if not items:
         lines.append("  (no items in stock)")
     else:
         for item in items:
-            lines.append(f"  • {item.name} (qty: {item.quantity})")
+            lines.append(
+                f"  • {_format_item_with_optional_brand(item, include_brand=include_brand)}"
+            )
     await update.message.reply_text("\n".join(lines))
 
 
@@ -198,7 +221,9 @@ async def handle_inventory_check(
         lines.append("✅ Available")
         for item in available_items:
             loc = f" — {item.location_name}" if item.location_name else ""
-            lines.append(f"  • {item.name}{loc} (qty: {item.quantity})")
+            include_brand = (item.location_name or "").strip().lower() == "filament"
+            item_text = _format_item_with_optional_brand(item, include_brand=include_brand)
+            lines.append(f"  • {item_text}{loc}")
     if unavailable:
         if lines:
             lines.append("")

@@ -21,6 +21,7 @@ class HomeBoxItem:
     archived: bool
     description: str | None = None
     location_name: str | None = None
+    tags: list[str] | None = None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> HomeBoxItem:
@@ -30,6 +31,29 @@ class HomeBoxItem:
             location_name = location.get("name") or None
         elif location is not None and not isinstance(location, dict):
             location_name = str(location)
+
+        parsed_tags: list[str] = []
+        raw_tags = data.get("tags")
+        if isinstance(raw_tags, list):
+            for tag in raw_tags:
+                if isinstance(tag, str):
+                    value = tag.strip()
+                elif isinstance(tag, dict):
+                    value = (
+                        tag.get("name")
+                        or tag.get("label")
+                        or tag.get("value")
+                        or tag.get("text")
+                        or ""
+                    )
+                    if not isinstance(value, str):
+                        value = str(value)
+                    value = value.strip()
+                else:
+                    value = str(tag).strip()
+                if value:
+                    parsed_tags.append(value)
+
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
@@ -37,6 +61,7 @@ class HomeBoxItem:
             archived=data.get("archived", False),
             description=data.get("description") or None,
             location_name=location_name,
+            tags=parsed_tags or None,
         )
 
 
