@@ -68,15 +68,17 @@ def _search_term_in_item(search: str, item: HomeBoxItem) -> bool:
     return s in name or s in desc or (len(s) >= 2 and (s in name or s in desc))
 
 
-def _get_matching_available_item(
+def _get_matching_available_items(
     items: list[HomeBoxItem], search_term: str
-) -> HomeBoxItem | None:
-    for item in items:
-        if item.archived or item.quantity is None or item.quantity < 1:
-            continue
-        if _search_term_in_item(search_term, item):
-            return item
-    return None
+) -> list[HomeBoxItem]:
+    return [
+        item
+        for item in items
+        if not item.archived
+        and item.quantity is not None
+        and item.quantity >= 1
+        and _search_term_in_item(search_term, item)
+    ]
 
 
 async def handle_location_items(
@@ -161,16 +163,30 @@ async def handle_inventory_check(
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
+    try:
+        locations = await homebox_client.get_locations()
+        all_location_ids = [loc.id for loc in locations if loc.id]
+    except Exception as e:
+        logger.exception("Failed to fetch locations: %s", e)
+        await update.message.reply_text(
+            "Could not load locations. HomeBox may be unreachable."
+        )
+        return
+
     available_items: list[HomeBoxItem] = []
     unavailable: list[str] = []
     failed: list[str] = []
 
     for item_query in parsed.items:
         try:
-            results = await homebox_client.search_items(q=item_query, page_size=10)
-            match = _get_matching_available_item(results, item_query)
-            if match:
-                available_items.append(match)
+            results = await homebox_client.search_items(
+                q=item_query,
+                location_ids=all_location_ids if all_location_ids else None,
+                page_size=100,
+            )
+            matches = _get_matching_available_items(results, item_query)
+            if matches:
+                available_items.extend(matches)
             else:
                 unavailable.append(item_query)
         except Exception as e:
